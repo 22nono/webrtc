@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Diagnostic caméras</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EEF1F4; --surface:#FFFFFF; --ink:#1C2A3A; --muted:#5E6B7A; --line:#D5DCE3;
+  --accent:#0F6FBF; --accent-ink:#FFFFFF; --ok:#2E7D4F; --warn:#B4541A; --tint:#E3ECF5;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121A23; --surface:#1A2531; --ink:#E4EAF0; --muted:#93A1B0; --line:#2C3A49;
+    --accent:#4FA3E8; --accent-ink:#0B1622; --ok:#5CC08A; --warn:#E89A5C; --tint:#1F3042;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121A23; --surface:#1A2531; --ink:#E4EAF0; --muted:#93A1B0; --line:#2C3A49;
+  --accent:#4FA3E8; --accent-ink:#0B1622; --ok:#5CC08A; --warn:#E89A5C; --tint:#1F3042;
+  color-scheme: dark;
+}
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+main{max-width:46rem;margin:0 auto;padding:1.25rem 1rem 3rem}
+h1{font-family:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;font-weight:600;font-size:2rem;line-height:1.1;margin:.5rem 0 .4rem;letter-spacing:-.01em}
+h2{font-size:1.15rem;font-weight:600;margin:2rem 0 .6rem}
+h3{font-size:1rem;font-weight:600;margin:0}
+p{margin:.3rem 0}
+.lead{color:var(--muted);max-width:36rem}
+button,select{font:inherit;color:inherit}
+.btn{appearance:none;border:0;border-radius:.5rem;padding:.7rem 1.1rem;background:var(--accent);color:var(--accent-ink);font-weight:600;cursor:pointer;min-height:44px}
+.btn.secondary{background:transparent;color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.row{display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-top:1rem}
+.status{color:var(--muted);font-size:.9rem;min-height:1.4em;margin-top:.6rem}
+.status.err{color:var(--warn)}
+.cam{background:var(--surface);border-left:4px solid var(--line);padding:1rem;margin:.8rem 0;border-radius:0 .4rem .4rem 0}
+.cam.done{border-left-color:var(--accent)}
+.cam-head{display:flex;justify-content:space-between;gap:.8rem;align-items:flex-start;flex-wrap:wrap}
+.facing{display:inline-block;font-size:.8rem;font-weight:600;padding:.1rem .5rem;border-radius:1rem;background:var(--tint);color:var(--accent);margin-left:.4rem;vertical-align:.1em}
+.ids{font-size:.8rem;color:var(--muted);word-break:break-all;margin-top:.3rem}
+.scroll{overflow-x:auto;margin-top:.8rem}
+table{border-collapse:collapse;width:100%;font-size:.88rem;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:.35rem .5rem;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:.8rem}
+td:first-child{font-weight:500;white-space:nowrap}
+.sub{font-size:.85rem;font-weight:600;margin-top:1rem;color:var(--muted)}
+.na{color:var(--muted)}
+.preview{position:relative;background:#000;border-radius:.5rem;overflow:hidden;aspect-ratio:3/4;max-height:70vh;margin-top:.8rem}
+@media (min-width:40rem){.preview{aspect-ratio:16/9}}
+video{width:100%;height:100%;object-fit:contain;display:block}
+.overlay{position:absolute;left:.6rem;bottom:.6rem;right:.6rem;color:#fff;font-size:.85rem;font-variant-numeric:tabular-nums;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+.controls{display:flex;flex-wrap:wrap;gap:1rem;align-items:center;margin-top:.8rem}
+.controls label{display:flex;align-items:center;gap:.5rem;font-size:.9rem}
+input[type=range]{width:12rem;accent-color:var(--accent)}
+select{background:var(--surface);border:1.5px solid var(--line);border-radius:.5rem;padding:.6rem;min-height:44px;max-width:100%}
+details{background:var(--surface);border-radius:.4rem;padding:.8rem 1rem;margin-top:.6rem}
+summary{cursor:pointer;font-weight:600}
+pre{white-space:pre-wrap;word-break:break-word;font-size:.75rem;max-height:20rem;overflow:auto;background:var(--bg);padding:.6rem;border-radius:.3rem}
+.yes{color:var(--ok);font-weight:600}.no{color:var(--warn);font-weight:600}
+</style>
+</head>
+<body>
+<main>
+  <h1>Diagnostic caméras</h1>
+  <p class="lead">Liste les caméras que le navigateur de ce téléphone expose, avec ce que chacune sait faire selon l’API Web.</p>
+
+  <div class="row">
+    <button class="btn" id="btnAllow">Autoriser la caméra</button>
+    <button class="btn secondary" id="btnAll" disabled>Analyser toutes les caméras</button>
+  </div>
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+
+  <h2>Caméras détectées</h2>
+  <div id="cams"><p class="na">Autorisez la caméra pour voir les noms et les identifiants.</p></div>
+
+  <h2>Aperçu en direct</h2>
+  <div class="row" style="margin-top:0">
+    <select id="selCam" aria-label="Caméra à afficher" disabled><option>Aucune caméra</option></select>
+    <button class="btn secondary" id="btnStop" disabled>Arrêter</button>
+  </div>
+  <div class="preview" id="previewBox" hidden>
+    <video id="video" playsinline muted autoplay></video>
+    <div class="overlay" id="overlay"></div>
+  </div>
+  <div class="controls" id="controls"></div>
+
+  <h2>Navigateur</h2>
+  <div id="env"></div>
+
+  <h2>Rapport</h2>
+  <p class="lead">Copiez le rapport JSON pour comparer plusieurs téléphones.</p>
+  <div class="row"><button class="btn secondary" id="btnCopy">Copier le rapport</button></div>
+  <details><summary>Voir le JSON</summary><pre id="json"></pre></details>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const md = navigator.mediaDevices;
+const state = { devices: [], analyses: {}, permission: null };
+let previewStream = null;
+
+function setStatus(msg, err){ const s=$('#status'); s.textContent=msg; s.classList.toggle('err',!!err); }
+const r = n => typeof n==='number' ? +n.toFixed(3) : n;
+function fmt(v){
+  if (v===undefined||v===null||v==='') return '—';
+  if (Array.isArray(v)) return v.length ? v.map(x=>typeof x==='object'?JSON.stringify(x):x).join(', ') : '—';
+  if (typeof v==='object'){
+    if ('min' in v || 'max' in v){ let s=`${r(v.min)} – ${r(v.max)}`; if (v.step) s+=` (pas ${r(v.step)})`; return s; }
+    return JSON.stringify(v);
+  }
+  if (typeof v==='boolean') return v?'oui':'non';
+  return String(r(v));
+}
+const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const short = id => id ? (id.length>16 ? id.slice(0,8)+'…'+id.slice(-6) : id) : '—';
+const facingLabel = f => ({user:'avant',environment:'arrière',left:'gauche',right:'droite'}[f]||f);
+
+function guessFacing(label){
+  const l=(label||'').toLowerCase();
+  if (/back|rear|arrière|environment/.test(l)) return 'arrière (d’après le nom)';
+  if (/front|avant|user|facetime/.test(l)) return 'avant (d’après le nom)';
+  return null;
+}
+
+async function renderEnv(){
+  let perm='non disponible';
+  try{ if(navigator.permissions){ const p=await navigator.permissions.query({name:'camera'}); perm=p.state; state.permission=p.state; } }catch{ }
+  const supported = md && md.getSupportedConstraints ? Object.keys(md.getSupportedConstraints()).filter(k=>md.getSupportedConstraints()[k]) : [];
+  const yn = b => b?'<span class="yes">oui</span>':'<span class="no">non</span>';
+  const tr = typeof MediaStreamTrack!=='undefined' ? MediaStreamTrack.prototype : {};
+  $('#env').innerHTML = `<div class="cam"><div class="scroll"><table>
+    <tr><td>Contexte sécurisé (HTTPS)</td><td>${yn(window.isSecureContext)}</td></tr>
+    <tr><td>mediaDevices</td><td>${yn(!!md)}</td></tr>
+    <tr><td>track.getCapabilities()</td><td>${yn('getCapabilities' in tr)}</td></tr>
+    <tr><td>ImageCapture</td><td>${yn('ImageCapture' in window)}</td></tr>
+    <tr><td>InputDeviceInfo.getCapabilities()</td><td>${yn(typeof InputDeviceInfo!=='undefined' && 'getCapabilities' in InputDeviceInfo.prototype)}</td></tr>
+    <tr><td>Permission caméra</td><td>${esc(perm)}</td></tr>
+    <tr><td>Contraintes supportées</td><td>${esc(supported.join(', ')||'—')}</td></tr>
+    <tr><td>User agent</td><td style="white-space:normal;word-break:break-word">${esc(navigator.userAgent)}</td></tr>
+  </table></div></div>`;
+  return supported;
+}
+
+function renderCams(){
+  const box=$('#cams');
+  const cams=state.devices;
+  if (!cams.length){ box.innerHTML='<p class="na">Aucune caméra exposée par ce navigateur.</p>'; return; }
+  box.innerHTML = cams.map((d,i)=>{
+    const a=state.analyses[d.deviceId];
+    const facing = a?.settings?.facingMode ? facingLabel(a.settings.facingMode) : guessFacing(d.label);
+    let body='';
+    if (a?.error) body=`<p class="status err">Échec de l’ouverture : ${esc(a.error)}</p>`;
+    else if (a){
+      const keys=[...new Set([...Object.keys(a.capabilities||{}),...Object.keys(a.settings||{})])].filter(k=>k!=='deviceId'&&k!=='groupId').sort();
+      body += `<div class="scroll"><table><thead><tr><th>Propriété</th><th>Possible</th><th>Actuel</th></tr></thead><tbody>${
+        keys.map(k=>`<tr><td>${esc(k)}</td><td>${esc(fmt(a.capabilities?.[k]))}</td><td>${esc(fmt(a.settings?.[k]))}</td></tr>`).join('')
+      }</tbody></table></div>`;
+      if (a.photo){
+        body += `<p class="sub">Capacités photo (ImageCapture)</p><div class="scroll"><table><tbody>${
+          Object.entries(a.photo).map(([k,v])=>`<tr><td>${esc(k)}</td><td>${esc(fmt(v))}</td></tr>`).join('')
+        }</tbody></table></div>`;
+      }
+    }
+    return `<div class="cam ${a&&!a.error?'done':''}">
+      <div class="cam-head">
+        <div><h3>${esc(d.label||'Caméra '+(i+1)+' (nom masqué)')}${facing?`<span class="facing">${esc(facing)}</span>`:''}</h3>
+        <div class="ids">deviceId ${esc(short(d.deviceId))} · groupId ${esc(short(d.groupId))}</div></div>
+        <button class="btn secondary" data-analyze="${i}">${a?'Réanalyser':'Analyser'}</button>
+      </div>${body}</div>`;
+  }).join('');
+  box.querySelectorAll('[data-analyze]').forEach(b=>b.onclick=async()=>{
+    b.disabled=true; await stopPreview(); await analyze(cams[+b.dataset.analyze]); renderCams(); updateJson();
+  });
+}
+
+async function listDevices(){
+  const all = await md.enumerateDevices();
+  state.devices = all.filter(d=>d.kind==='videoinput');
+  const sel=$('#selCam');
+  sel.innerHTML = state.devices.length ? '<option value="">Choisir une caméra…</option>'+state.devices.map((d,i)=>`<option value="${i}">${esc(d.label||'Caméra '+(i+1))}</option>`).join('') : '<option>Aucune caméra</option>';
+  sel.disabled = !state.devices.length;
+  $('#btnAll').disabled = !state.devices.length;
+  renderCams(); updateJson();
+}
+
+async function analyze(d){
+  setStatus(`Analyse de « ${d.label||d.deviceId} »…`);
+  const res={};
+  let stream;
+  try{
+    stream = await md.getUserMedia({video:{deviceId:{exact:d.deviceId}}});
+    const track = stream.getVideoTracks()[0];
+    res.trackLabel = track.label;
+    res.capabilities = track.getCapabilities ? track.getCapabilities() : null;
+    res.settings = track.getSettings();
+    if ('ImageCapture' in window){
+      try{
+        const pc = await new ImageCapture(track).getPhotoCapabilities();
+        res.photo = { imageWidth: pc.imageWidth, imageHeight: pc.imageHeight, fillLightMode: pc.fillLightMode, redEyeReduction: pc.redEyeReduction };
+      }catch(e){ res.photo = { erreur: e.message }; }
+    }
+    if (d.getCapabilities){ try{ res.deviceCapabilities = d.getCapabilities(); }catch{} }
+    setStatus(`Analyse terminée : ${d.label||d.deviceId}`);
+  }catch(e){
+    res.error = `${e.name} – ${e.message}`;
+    setStatus(`Impossible d’ouvrir « ${d.label||d.deviceId} » : ${e.name}`, true);
+  }finally{
+    stream?.getTracks().forEach(t=>t.stop());
+  }
+  state.analyses[d.deviceId]=res;
+  await new Promise(r=>setTimeout(r,300)); // laisse le temps au matériel de se libérer (iOS)
+}
+
+$('#btnAllow').onclick = async ()=>{
+  if (!md?.getUserMedia){ setStatus('Ce navigateur n’expose pas getUserMedia. Ouvrez la page en HTTPS dans Chrome ou Safari.', true); return; }
+  try{
+    setStatus('Demande d’autorisation…');
+    const s = await md.getUserMedia({video:true});
+    s.getTracks().forEach(t=>t.stop());
+    await listDevices(); await renderEnv();
+    setStatus(`${state.devices.length} caméra(s) détectée(s). Analysez-les une par une ou toutes d’un coup.`);
+    $('#btnAllow').textContent='Actualiser la liste';
+  }catch(e){
+    setStatus(`Accès refusé ou bloqué (${e.name}). Vérifiez les réglages du navigateur, ou que la page autorise la caméra.`, true);
+  }
+};
+
+$('#btnAll').onclick = async ()=>{
+  $('#btnAll').disabled=true; await stopPreview();
+  for (const d of state.devices){ await analyze(d); renderCams(); }
+  updateJson(); $('#btnAll').disabled=false;
+  setStatus('Toutes les caméras ont été analysées.');
+};
+
+async function stopPreview(){
+  previewStream?.getTracks().forEach(t=>t.stop()); previewStream=null;
+  $('#video').srcObject=null; $('#previewBox').hidden=true; $('#controls').innerHTML=''; $('#btnStop').disabled=true;
+}
+$('#btnStop').onclick = ()=>{ stopPreview(); $('#selCam').value=''; };
+
+$('#selCam').onchange = async e=>{
+  await stopPreview();
+  const d=state.devices[+e.target.value]; if(!d||e.target.value==='') return;
+  try{
+    previewStream = await md.getUserMedia({video:{deviceId:{exact:d.deviceId},width:{ideal:1920},height:{ideal:1080}}});
+    const v=$('#video'); v.srcObject=previewStream; await v.play().catch(()=>{});
+    $('#previewBox').hidden=false; $('#btnStop').disabled=false;
+    const track=previewStream.getVideoTracks()[0];
+    const caps=track.getCapabilities?track.getCapabilities():{};
+    const upd=()=>{ const s=track.getSettings(); $('#overlay').textContent=`${s.width}×${s.height} · ${r(s.frameRate)} i/s${s.facingMode?' · '+facingLabel(s.facingMode):''}${s.zoom?' · zoom '+r(s.zoom):''}`; };
+    upd(); v.onresize=upd;
+    const c=$('#controls');
+    if (caps.zoom){
+      const s=track.getSettings();
+      c.insertAdjacentHTML('beforeend',`<label>Zoom <input type="range" id="zoom" min="${caps.zoom.min}" max="${caps.zoom.max}" step="${caps.zoom.step||0.1}" value="${s.zoom??caps.zoom.min}"></label>`);
+      $('#zoom').oninput=ev=>track.applyConstraints({advanced:[{zoom:+ev.target.value}]}).then(upd).catch(()=>{});
+    }
+    if (caps.torch){
+      c.insertAdjacentHTML('beforeend',`<label><input type="checkbox" id="torch"> Torche</label>`);
+      $('#torch').onchange=ev=>track.applyConstraints({advanced:[{torch:ev.target.checked}]}).catch(err=>setStatus('Torche : '+err.message,true));
+    }
+    if (!caps.zoom && !caps.torch) c.innerHTML='<p class="na">Ni zoom ni torche pilotables pour cette caméra.</p>';
+  }catch(err){ setStatus(`Aperçu impossible : ${err.name}`, true); }
+};
+
+function buildReport(){
+  return {
+    date:new Date().toISOString(), userAgent:navigator.userAgent, secureContext:window.isSecureContext, permission:state.permission,
+    supportedConstraints: md?.getSupportedConstraints ? md.getSupportedConstraints() : null,
+    cameras: state.devices.map(d=>({label:d.label, deviceId:d.deviceId, groupId:d.groupId, ...state.analyses[d.deviceId]}))
+  };
+}
+function updateJson(){ $('#json').textContent = JSON.stringify(buildReport(), null, 2); }
+
+$('#btnCopy').onclick = async ()=>{
+  const txt=JSON.stringify(buildReport(),null,2);
+  try{ await navigator.clipboard.writeText(txt); setStatus('Rapport copié dans le presse-papiers.'); }
+  catch{
+    const ta=document.createElement('textarea'); ta.value=txt; document.body.appendChild(ta); ta.select();
+    const ok=document.execCommand && document.execCommand('copy'); ta.remove();
+    setStatus(ok?'Rapport copié dans le presse-papiers.':'Copie bloquée : ouvrez « Voir le JSON » et copiez-le à la main.', !ok);
+  }
+};
+
+md?.addEventListener?.('devicechange', ()=>{ if (state.devices.length) listDevices(); });
+renderEnv(); updateJson();
+if (!window.isSecureContext) setStatus('Cette page n’est pas servie en HTTPS : les navigateurs y bloquent la caméra.', true);
+</script>
+</body>
+</html>
