@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>apiRTC – bascule caméra avant / arrière</title>
+<!-- En production, figez une version précise plutôt que « latest » -->
+<script src="https://cloud.apirtc.com/apiRTC/apiRTC-latest.min.js"></script>
+<style>
+:root{
+  --bg:#F2F4F6; --surface:#FFFFFF; --ink:#17212B; --muted:#5D6975; --line:#D3DAE1;
+  --accent:#1F7A5C; --accent-ink:#FFFFFF; --danger:#C8372D; --err:#B3401E;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --bg:#10161C; --surface:#18212A; --ink:#E6ECF1; --muted:#97A3AE; --line:#2B3846; --accent:#3FBF8F; --accent-ink:#06120D; --danger:#E5574C; --err:#F08A63; color-scheme: dark; }
+}
+:root[data-theme="dark"]{ --bg:#10161C; --surface:#18212A; --ink:#E6ECF1; --muted:#97A3AE; --line:#2B3846; --accent:#3FBF8F; --accent-ink:#06120D; --danger:#E5574C; --err:#F08A63; color-scheme: dark; }
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+
+/* ---------- Écran d'accueil ---------- */
+.intro{min-height:100%;display:flex;flex-direction:column;justify-content:center;gap:1rem;max-width:26rem;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 2rem) 1.5rem calc(env(safe-area-inset-bottom,0px) + 2rem)}
+.intro h1{font-size:1.7rem;margin:0;line-height:1.15}
+.intro p{margin:0;color:var(--muted)}
+label{display:block;font-size:.85rem;font-weight:600;margin-bottom:.3rem}
+input{width:100%;font:inherit;color:inherit;background:var(--surface);border:1.5px solid var(--line);border-radius:.5rem;padding:.7rem .8rem;min-height:48px}
+.hint{font-size:.8rem;color:var(--muted);margin-top:.3rem}
+.btn{appearance:none;border:0;border-radius:2rem;padding:.85rem 1.6rem;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;min-height:48px;cursor:pointer}
+.btn:disabled{opacity:.5}
+.err{color:var(--err)}
+.btn:focus-visible,.round:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+/* ---------- Vue appel (toujours sombre, comme une appli de visio) ---------- */
+.call{position:fixed;inset:0;background:#000;color:#fff}
+.call[hidden],.intro[hidden]{display:none}
+
+#remote{position:absolute;inset:0;display:grid;grid-auto-rows:1fr;gap:2px}
+#remote video{width:100%;height:100%;object-fit:cover;display:block;background:#111}
+
+/* La vidéo locale occupe tout l'écran tant que personne n'a rejoint, puis passe en vignette */
+#localWrap{position:absolute;inset:0;transition:all .25s ease}
+.has-remote #localWrap{inset:auto;top:calc(env(safe-area-inset-top,0px) + 3.5rem);right:.75rem;width:28vw;max-width:150px;aspect-ratio:3/4;border-radius:.7rem;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.5);z-index:2}
+#localVideo{width:100%;height:100%;object-fit:cover;display:block;transition:opacity .15s}
+#localVideo.mirror{transform:scaleX(-1)}
+#localVideo.switching{opacity:0}
+
+.top{position:absolute;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top,0px) + .75rem) .9rem .75rem;font-size:.8rem;line-height:1.35;text-shadow:0 1px 3px rgba(0,0,0,.9);background:linear-gradient(rgba(0,0,0,.5),transparent);z-index:3;white-space:pre-line;font-variant-numeric:tabular-nums;pointer-events:none}
+.toast{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 7rem);transform:translateX(-50%);background:rgba(0,0,0,.75);padding:.5rem .9rem;border-radius:1rem;font-size:.85rem;max-width:90%;text-align:center;z-index:4}
+.toast[hidden]{display:none}
+
+.bar{position:absolute;left:0;right:0;bottom:0;padding:1rem 1.5rem calc(env(safe-area-inset-bottom,0px) + 1.25rem);display:flex;justify-content:center;gap:1.5rem;background:linear-gradient(transparent,rgba(0,0,0,.6));z-index:3}
+.round{appearance:none;border:0;cursor:pointer;display:grid;place-items:center;color:#fff;background:rgba(255,255,255,.18);border-radius:50%;width:56px;height:56px;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.round:disabled{opacity:.4}
+.round svg{width:26px;height:26px}
+#hangupBtn{background:var(--danger)}
+#switchBtn svg{transition:transform .35s}
+#switchBtn.spin svg{transform:rotate(180deg)}
+@media (prefers-reduced-motion: reduce){ #localWrap,#localVideo,#switchBtn svg{transition:none} }
+</style>
+</head>
+<body>
+
+<section class="intro" id="intro">
+  <h1>Visio apiRTC</h1>
+  <p>Ouvrez cette page sur deux appareils avec le même nom de salle pour vérifier que l’autre personne voit bien la bascule de caméra.</p>
+  <div>
+    <label for="room">Nom de la salle</label>
+    <input id="room" autocomplete="off" autocapitalize="off">
+  </div>
+  <div>
+    <label for="apiKey">Clé API apiRTC</label>
+    <input id="apiKey" autocomplete="off" autocapitalize="off" value="myDemoApiKey">
+    <p class="hint">La clé de démonstration suffit pour tester. Utilisez la vôtre en production.</p>
+  </div>
+  <button class="btn" id="startBtn">Rejoindre</button>
+  <p id="introMsg" role="status" aria-live="polite"></p>
+</section>
+
+<section class="call" id="call" hidden>
+  <div id="remote"></div>
+  <div id="localWrap"><video id="localVideo" playsinline muted autoplay></video></div>
+  <div class="top" id="info"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <div class="bar">
+    <button class="round" id="linkBtn" aria-label="Copier le lien de la salle">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+    </button>
+    <button class="round" id="hangupBtn" aria-label="Raccrocher">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 15.5c5-4.7 13-4.7 18 0l-2.2 2.4-3.3-1.4v-2.7a9.5 9.5 0 0 0-7 0v2.7l-3.3 1.4z"/></svg>
+    </button>
+    <button class="round" id="switchBtn" aria-label="Changer de caméra" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/></svg>
+    </button>
+  </div>
+</section>
+
+<script>
+const $ = id => document.getElementById(id);
+const localVideo = $("localVideo"), switchBtn = $("switchBtn");
+const CLOUD_URL = "https://cloud.apirtc.com";
+
+let ua = null, session = null, conversation = null, localStream = null;
+let facing = "user";       // côté actuellement utilisé
+let busy = false, toastTimer;
+
+/* ---------- Création du flux local par orientation ---------- */
+function createLocalStream(mode){
+  return ua.createStream({
+    facingMode: mode,                         // l'option apiRTC dédiée : « user » ou « environment »
+    constraints: {
+      audio: true,
+      video: { width: { ideal: 1280 }, height: { ideal: 720 } }
+    },
+    tryAudioOnlyAfterUserMediaError: false    // sinon apiRTC peut repasser en audio seul sans prévenir
+  });
+}
+
+// Côté réellement obtenu, lu sur la piste vidéo native
+function realFacing(stream){
+  const track = stream?.getData()?.getVideoTracks()[0];
+  return track?.getSettings().facingMode || null;
+}
+
+function showLocal(stream){
+  stream.attachToElement(localVideo);
+  localVideo.muted = true;                   // jamais d'écho de sa propre voix
+  localVideo.play().catch(() => {});
+  localVideo.classList.toggle("mirror", facing === "user");
+  updateInfo();
+}
+
+/* ---------- Bascule avant / arrière ---------- */
+async function switchCamera(){
+  if (busy || !localStream) return;
+  busy = true; switchBtn.disabled = true;
+  switchBtn.classList.toggle("spin");
+  localVideo.classList.add("switching");
+
+  const target = facing === "user" ? "environment" : "user";
+  const old = localStream;
+  let next = null;
+
+  // Libérer l'ancienne caméra AVANT d'ouvrir l'autre : beaucoup de téléphones refusent d'en ouvrir deux
+  old.release();
+
+  try {
+    next = await createLocalStream(target);
+  } catch (e) {
+    console.warn("Bascule impossible, retour à la caméra précédente", e);
+    showToast("Impossible d’ouvrir l’autre caméra.");
+    try { next = await createLocalStream(facing); } catch (e2) { showToast(errorText(e2)); }
+  }
+
+  if (next) {
+    const got = realFacing(next);
+    if (got && got !== target && next !== null) showToast("Pas d’autre caméra disponible de ce côté.");
+    facing = got || target;
+    try {
+      await replacePublished(old, next);     // l'autre participant reçoit la nouvelle vidéo
+    } catch (e) {
+      console.error("Remplacement du flux publié impossible", e);
+      showToast("La nouvelle caméra n’a pas pu être envoyée.");
+    }
+    localStream = next;
+    showLocal(next);
+  }
+
+  localVideo.classList.remove("switching");
+  busy = false; switchBtn.disabled = false;
+}
+
+// Remplace le flux publié dans la conversation, sans renégocier tout l'appel
+async function replacePublished(oldStream, newStream){
+  if (!conversation) return;
+  if (typeof conversation.replacePublishedStream === "function") {
+    await conversation.replacePublishedStream(oldStream, newStream);
+  } else {
+    // Repli pour les anciennes versions d'apiRTC
+    await conversation.unpublish(oldStream);
+    await conversation.publish(newStream);
+  }
+}
+
+/* ---------- Connexion à la salle ---------- */
+async function join(){
+  const room = $("room").value.trim();
+  const key = $("apiKey").value.trim();
+  if (!room || !key) { $("introMsg").innerHTML = '<span class="err">Renseignez un nom de salle et une clé API.</span>'; return; }
+  if (!window.isSecureContext) { $("introMsg").innerHTML = '<span class="err">La caméra n’est accessible qu’en HTTPS : ouvrez la page via GitHub Pages.</span>'; return; }
+  if (typeof apiRTC === "undefined") { $("introMsg").innerHTML = '<span class="err">La bibliothèque apiRTC n’a pas pu être chargée.</span>'; return; }
+
+  $("startBtn").disabled = true;
+  $("introMsg").textContent = "Ouverture de la caméra…";
+  history.replaceState(null, "", "#" + encodeURIComponent(room));
+
+  try {
+    ua = new apiRTC.UserAgent({ uri: "apzkey:" + key });
+    localStream = await createLocalStream(facing);
+    facing = realFacing(localStream) || facing;
+
+    $("intro").hidden = true; $("call").hidden = false;
+    showLocal(localStream);
+
+    // Le bouton n'a de sens que s'il y a au moins deux caméras (fiable seulement après l'autorisation)
+    const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+    switchBtn.hidden = cams.length < 2;
+
+    showToast("Connexion à la salle…");
+    session = await ua.register({ cloudUrl: CLOUD_URL });
+    conversation = session.getOrCreateConversation(room, { meshOnlyEnabled: true });
+
+    conversation.on("streamListChanged", info => {
+      if (info.listEventType === "added" && info.isRemote) {
+        conversation.subscribeToStream(info.streamId).catch(e => console.error("Abonnement impossible", e));
+      }
+    });
+    conversation.on("streamAdded", stream => {
+      stream.addInDiv("remote", "remote-media-" + stream.getId(), {}, false);
+      updateRemoteLayout();
+    });
+    conversation.on("streamRemoved", stream => {
+      stream.removeFromDiv("remote", "remote-media-" + stream.getId());
+      updateRemoteLayout();
+    });
+
+    await conversation.join();
+    await conversation.publish(localStream);
+    showToast("Connecté. En attente d’un autre participant…");
+    updateInfo();
+  } catch (e) {
+    console.error(e);
+    await cleanup();
+    $("call").hidden = true; $("intro").hidden = false;
+    $("introMsg").innerHTML = `<span class="err">${errorText(e)}</span>`;
+  } finally {
+    $("startBtn").disabled = false;
+  }
+}
+
+async function hangup(){
+  await cleanup();
+  $("call").hidden = true; $("intro").hidden = false;
+  $("introMsg").textContent = "Appel terminé.";
+}
+
+async function cleanup(){
+  try { if (conversation) { await conversation.leave(); conversation.destroy(); } } catch (e) { console.warn(e); }
+  try { localStream?.release(); } catch {}
+  try { if (ua) await ua.unregister(); } catch {}
+  conversation = null; session = null; localStream = null; ua = null;
+  $("remote").innerHTML = ""; updateRemoteLayout();
+}
+
+/* ---------- Affichage ---------- */
+function updateRemoteLayout(){
+  const n = $("remote").querySelectorAll("video").length;
+  $("call").classList.toggle("has-remote", n > 0);
+  updateInfo();
+}
+
+function updateInfo(){
+  const track = localStream?.getData()?.getVideoTracks()[0];
+  if (!track) { $("info").textContent = ""; return; }
+  const s = track.getSettings();
+  const side = { user: "avant", environment: "arrière" }[s.facingMode] || "inconnu";
+  const room = $("room").value.trim();
+  const n = $("remote").querySelectorAll("video").length;
+  $("info").textContent = `Salle « ${room} » · ${n} participant(s) distant(s)\n${track.label || "Caméra"} · ${side} · ${s.width}×${s.height}`;
+}
+
+function errorText(e){
+  const name = e?.name || e?.error?.name || "";
+  switch (name) {
+    case "NotAllowedError":  return "Accès à la caméra refusé. Autorisez-le dans les réglages du navigateur.";
+    case "NotReadableError": return "La caméra est utilisée par une autre application. Fermez-la puis réessayez.";
+    case "NotFoundError":    return "Aucune caméra trouvée sur cet appareil.";
+    default:                 return "Connexion impossible" + (name ? ` (${name})` : "") + ". Consultez la console pour le détail.";
+  }
+}
+
+function showToast(msg){
+  const t = $("toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 3500);
+}
+
+async function copyLink(){
+  try { await navigator.clipboard.writeText(location.href); showToast("Lien copié : ouvrez-le sur un autre appareil."); }
+  catch { showToast(location.href); }
+}
+
+/* ---------- Initialisation ---------- */
+$("room").value = decodeURIComponent(location.hash.slice(1)) || "salle-" + Math.random().toString(36).slice(2, 7);
+$("startBtn").onclick = join;
+$("hangupBtn").onclick = hangup;
+switchBtn.onclick = switchCamera;
+$("linkBtn").onclick = copyLink;
+
+// iOS coupe la caméra quand la page passe en arrière-plan : on la relance au retour
+document.addEventListener("visibilitychange", async () => {
+  if (document.hidden || !localStream || busy) return;
+  const track = localStream.getData()?.getVideoTracks()[0];
+  if (track && track.readyState === "live") return;
+  busy = true;
+  try {
+    const old = localStream;
+    old.release();
+    const next = await createLocalStream(facing);
+    await replacePublished(old, next);
+    localStream = next; showLocal(next);
+  } catch (e) { showToast(errorText(e)); }
+  busy = false;
+});
+window.addEventListener("pagehide", () => { localStream?.release(); });
+</script>
+</body>
+</html>
