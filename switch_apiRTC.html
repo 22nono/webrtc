@@ -5,8 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#000000">
 <title>apiRTC – bascule caméra avant / arrière</title>
-<!-- En production, figez une version précise plutôt que « latest » -->
-<script src="https://cloud.apirtc.com/apiRTC/apiRTC-latest.min.js"></script>
+<!-- apiRTC en version figée depuis jsDelivr, avec repli sur le CDN Apizee si jsDelivr ne répond pas -->
+<script src="https://cdn.jsdelivr.net/npm/@apirtc/apirtc@5.0.37/apiRTC.min.js"
+        onerror="var s=document.createElement('script');s.src='https://cloud.apizee.com/apiRTC/apiRTC-latest.min.js';document.head.appendChild(s);"></script>
 <style>
 :root{
   --bg:#F2F4F6; --surface:#FFFFFF; --ink:#17212B; --muted:#5D6975; --line:#D3DAE1;
