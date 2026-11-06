@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Caméra – bascule avant / arrière</title>
+<style>
+:root{
+  --bg:#F2F4F6; --ink:#17212B; --muted:#5D6975; --accent:#1F7A5C; --accent-ink:#FFFFFF; --err:#B3401E;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --bg:#10161C; --ink:#E6ECF1; --muted:#97A3AE; --accent:#3FBF8F; --accent-ink:#06120D; --err:#F08A63; color-scheme: dark; }
+}
+:root[data-theme="dark"]{ --bg:#10161C; --ink:#E6ECF1; --muted:#97A3AE; --accent:#3FBF8F; --accent-ink:#06120D; --err:#F08A63; color-scheme: dark; }
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden}
+
+/* Écran d'accueil / erreur */
+.intro{position:fixed;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:1rem;padding:calc(env(safe-area-inset-top,0px) + 2rem) 1.5rem calc(env(safe-area-inset-bottom,0px) + 2rem);text-align:center}
+.intro h1{font-size:1.6rem;margin:0}
+.intro p{margin:0;color:var(--muted);max-width:22rem}
+.intro .err{color:var(--err)}
+.btn{appearance:none;border:0;border-radius:2rem;padding:.85rem 1.6rem;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;min-height:48px;cursor:pointer}
+.btn:focus-visible,.round:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+
+/* Vue caméra : toujours sur fond noir, comme une appli photo */
+.camera{position:fixed;inset:0;background:#000}
+.camera[hidden],.intro[hidden]{display:none}
+video{width:100%;height:100%;object-fit:cover;display:block;transition:opacity .15s}
+video.mirror{transform:scaleX(-1)}
+video.switching{opacity:0}
+
+.info{position:absolute;top:calc(env(safe-area-inset-top,0px) + .75rem);left:.75rem;right:.75rem;color:#fff;font-size:.8rem;line-height:1.35;text-shadow:0 1px 3px rgba(0,0,0,.9);font-variant-numeric:tabular-nums;pointer-events:none}
+.toast{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 7.5rem);transform:translateX(-50%);background:rgba(0,0,0,.7);color:#fff;padding:.5rem .9rem;border-radius:1rem;font-size:.85rem;max-width:90%;text-align:center}
+.toast[hidden]{display:none}
+
+.bar{position:absolute;left:0;right:0;bottom:0;padding:1rem 1.5rem calc(env(safe-area-inset-bottom,0px) + 1.25rem);display:grid;grid-template-columns:1fr auto 1fr;align-items:center;background:linear-gradient(transparent,rgba(0,0,0,.55))}
+.round{appearance:none;border:0;cursor:pointer;display:grid;place-items:center;color:#fff;background:rgba(255,255,255,.18);border-radius:50%;width:52px;height:52px;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.round:disabled{opacity:.4}
+.round svg{width:26px;height:26px}
+#switchBtn{justify-self:end}
+#switchBtn.spin svg{transition:transform .35s;transform:rotate(180deg)}
+#shutter{width:72px;height:72px;background:transparent;box-shadow:inset 0 0 0 4px #fff}
+#shutter::after{content:"";width:56px;height:56px;border-radius:50%;background:#fff}
+#shutter:active::after{transform:scale(.9)}
+#thumb{justify-self:start;width:52px;height:52px;border-radius:.6rem;object-fit:cover;border:2px solid #fff;background:#222}
+#thumb[hidden]{visibility:hidden;display:block}
+@media (prefers-reduced-motion: reduce){ video,#switchBtn.spin svg{transition:none} }
+</style>
+</head>
+<body>
+
+<section class="intro" id="intro">
+  <h1>Caméra</h1>
+  <p id="introMsg">Touchez le bouton pour ouvrir la caméra. Le navigateur vous demandera l’autorisation.</p>
+  <button class="btn" id="startBtn">Ouvrir la caméra</button>
+</section>
+
+<section class="camera" id="camera" hidden>
+  <video id="video" playsinline muted autoplay></video>
+  <div class="info" id="info"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <div class="bar">
+    <img id="thumb" alt="Dernière photo" hidden>
+    <button class="round" id="shutter" aria-label="Prendre une photo"></button>
+    <button class="round" id="switchBtn" aria-label="Changer de caméra" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/>
+      </svg>
+    </button>
+  </div>
+</section>
+
+<script>
+const $ = id => document.getElementById(id);
+const video = $("video"), switchBtn = $("switchBtn");
+const PREF_KEY = "camera-facing";
+
+let stream = null;
+let facing = loadPref() || "user";   // côté actuellement affiché
+let busy = false;
+let toastTimer;
+
+/* ---------- Préférence mémorisée ---------- */
+function loadPref(){ try { return localStorage.getItem(PREF_KEY); } catch { return null; } }
+function savePref(v){ try { localStorage.setItem(PREF_KEY, v); } catch {} }
+
+/* ---------- Ouverture d'une caméra par orientation ---------- */
+function stopStream(){
+  stream?.getTracks().forEach(t => t.stop());
+  stream = null;
+}
+
+async function openCamera(mode){
+  stopStream(); // indispensable : beaucoup de téléphones refusent 2 caméras ouvertes
+  const constraints = (strict) => ({
+    audio: false,
+    video: {
+      facingMode: strict ? { exact: mode } : { ideal: mode },
+      width:  { ideal: 1280 },
+      height: { ideal: 720 }
+    }
+  });
+
+  try {
+    stream = await navigator.mediaDevices.getUserMedia(constraints(true));
+  } catch (e) {
+    if (e.name !== "OverconstrainedError") throw e;
+    // Pas de caméra de ce côté (ordinateur, tablette…) : le navigateur fait au mieux
+    stream = await navigator.mediaDevices.getUserMedia(constraints(false));
+  }
+
+  const track = stream.getVideoTracks()[0];
+  const s = track.getSettings();
+  facing = s.facingMode || mode;               // côté réellement obtenu
+  savePref(facing);
+
+  track.addEventListener("ended", () => showToast("La caméra a été coupée. Touchez ⟳ pour la relancer."));
+
+  video.srcObject = stream;
+  video.classList.toggle("mirror", facing === "user");
+  await video.play().catch(() => {});
+  updateInfo(track);
+}
+
+/* ---------- Bascule avant / arrière ---------- */
+async function switchCamera(){
+  if (busy) return;
+  busy = true; switchBtn.disabled = true;
+  switchBtn.classList.toggle("spin");
+  video.classList.add("switching");
+  const target = facing === "user" ? "environment" : "user";
+  try {
+    await openCamera(target);
+    if (facing !== target) showToast("Pas d’autre caméra disponible de ce côté.");
+  } catch (e) {
+    showToast(errorText(e));
+    try { await openCamera(facing); } catch {}  // on essaie de revenir à l'état précédent
+  } finally {
+    video.classList.remove("switching");
+    busy = false; switchBtn.disabled = false;
+  }
+}
+
+/* ---------- Photo (non inversée, comme le voit l'autre personne) ---------- */
+function takePhoto(){
+  if (!stream || !video.videoWidth) return;
+  const c = document.createElement("canvas");
+  c.width = video.videoWidth; c.height = video.videoHeight;
+  c.getContext("2d").drawImage(video, 0, 0);
+  c.toBlob(b => {
+    const t = $("thumb");
+    if (t.src) URL.revokeObjectURL(t.src);
+    t.src = URL.createObjectURL(b); t.hidden = false;
+  }, "image/jpeg", 0.9);
+}
+
+/* ---------- Infos de débogage ---------- */
+function updateInfo(track){
+  const s = track.getSettings();
+  const side = { user: "avant", environment: "arrière" }[s.facingMode] || "inconnu";
+  $("info").textContent = `${track.label || "Caméra"}\nCôté : ${side} · ${s.width}×${s.height}` +
+    (s.frameRate ? ` · ${Math.round(s.frameRate)} i/s` : "");
+  $("info").style.whiteSpace = "pre-line";
+}
+
+/* ---------- Messages ---------- */
+function errorText(e){
+  switch (e.name) {
+    case "NotAllowedError":  return "Accès à la caméra refusé. Autorisez-le dans les réglages du navigateur.";
+    case "NotReadableError": return "La caméra est utilisée par une autre application. Fermez-la puis réessayez.";
+    case "NotFoundError":    return "Aucune caméra trouvée sur cet appareil.";
+    default:                 return `Impossible d’ouvrir la caméra (${e.name}).`;
+  }
+}
+function showToast(msg){
+  const t = $("toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 3500);
+}
+
+/* ---------- Démarrage ---------- */
+async function start(){
+  if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+    $("introMsg").innerHTML = '<span class="err">La caméra n’est accessible qu’en HTTPS. Ouvrez cette page via son adresse GitHub Pages.</span>';
+    return;
+  }
+  try {
+    await openCamera(facing);
+    $("intro").hidden = true; $("camera").hidden = false;
+    // Les noms et le nombre de caméras ne sont fiables qu'après l'autorisation
+    const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+    switchBtn.hidden = cams.length < 2;
+  } catch (e) {
+    $("introMsg").innerHTML = `<span class="err">${errorText(e)}</span>`;
+    $("startBtn").textContent = "Réessayer";
+  }
+}
+
+$("startBtn").onclick = start;
+switchBtn.onclick = switchCamera;
+$("shutter").onclick = takePhoto;
+
+// Libérer la caméra quand la page passe en arrière-plan, la rouvrir au retour
+document.addEventListener("visibilitychange", async () => {
+  if ($("camera").hidden) return;
+  if (document.hidden) stopStream();
+  else { try { await openCamera(facing); } catch (e) { showToast(errorText(e)); } }
+});
+</script>
+</body>
+</html>
