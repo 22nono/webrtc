@@ -39,12 +39,16 @@ input{width:100%;font:inherit;color:inherit;background:var(--surface);border:1.5
 
 /* ---------- Vue vidéo (toujours sombre) ---------- */
 .stage{position:fixed;inset:0;background:#000;color:#fff}
-#remote{position:absolute;inset:0}
-#remote video{width:100%;height:100%;object-fit:cover;display:block;background:#111}
+/* Flux distant : plein écran une fois l’appel établi, image entière sans zoom (bandes noires si besoin) */
+#remote{position:absolute;inset:0;display:none;background:#000}
+.connected #remote{display:block}
+#remoteVideo{width:100%;height:100%;object-fit:contain;display:block}
+#unmuteBtn{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:4}
 
 #localWrap{position:absolute;inset:0;transition:all .25s ease}
-.in-call #localWrap{inset:auto;top:calc(env(safe-area-inset-top,0px) + 3.5rem);right:.75rem;width:28vw;max-width:150px;aspect-ratio:3/4;border-radius:.7rem;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.5);z-index:2}
-#localVideo{width:100%;height:100%;object-fit:cover;display:block;transition:opacity .15s}
+.connected #localWrap{inset:auto;top:calc(env(safe-area-inset-top,0px) + 3.5rem);right:.75rem;width:28vw;max-width:150px;aspect-ratio:3/4;border-radius:.7rem;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.5);z-index:2}
+#localVideo{width:100%;height:100%;object-fit:contain;display:block;transition:opacity .15s}
+.connected #localVideo{object-fit:cover}   /* la vignette, elle, est remplie */
 #localVideo.mirror{transform:scaleX(-1)}
 #localVideo.switching{opacity:0}
 
@@ -98,7 +102,10 @@ input{width:100%;font:inherit;color:inherit;background:var(--surface);border:1.5
 
 <!-- 2. Vidéo : lobby puis appel -->
 <section class="stage" id="stage" hidden>
-  <div id="remote"></div>
+  <div id="remote">
+    <video id="remoteVideo" playsinline autoplay></video>
+    <button class="btn" id="unmuteBtn" hidden>Activer le son</button>
+  </div>
   <div id="localWrap"><video id="localVideo" playsinline muted autoplay></video></div>
   <div class="top" id="info"></div>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
@@ -148,10 +155,18 @@ let facing = "user", busy = false, toastTimer;
 
 /* ================= Caméra ================= */
 
+// Demande une image dans le même sens que l'écran : portrait sur un téléphone tenu droit
+function videoSize(){
+  const portrait = window.matchMedia("(orientation: portrait)").matches;
+  return portrait
+    ? { width: { ideal: 720 },  height: { ideal: 1280 } }
+    : { width: { ideal: 1280 }, height: { ideal: 720 } };
+}
+
 function createLocalStream(mode){
   return ua.createStream({
     facingMode: mode,
-    constraints: { audio: true, video: { width: { ideal: 1280 }, height: { ideal: 720 } } },
+    constraints: { audio: true, video: videoSize() },
     tryAudioOnlyAfterUserMediaError: false    // sinon apiRTC peut repasser en audio seul sans prévenir
   });
 }
@@ -336,20 +351,18 @@ function setupCall(call){
   currentCall = call;
 
   call.on("accepted", () => {
-    clearTimeout(ringTimer);
-    $("stage").classList.add("connected");
+    clearTimeout(ringTimer);   // la disposition change à l'arrivée de la vidéo distante (streamAdded)
     updateInfo();
   });
   call.on("declined", () => { showToast("Appel refusé."); endCall(); });
   call.on("streamAdded", remoteStream => {
     clearTimeout(ringTimer);
     $("stage").classList.add("connected");
-    $("remote").innerHTML = "";
-    remoteStream.addInDiv("remote", "remote-media-" + remoteStream.getId(), {}, false);
+    showRemote(remoteStream);
     updateInfo();
   });
   call.on("streamRemoved", remoteStream => {
-    remoteStream.removeFromDiv("remote", "remote-media-" + remoteStream.getId());
+    if ($("remoteVideo").srcObject === remoteStream.getData()) $("remoteVideo").srcObject = null;
   });
   call.on("hangup", () => { showToast("Appel terminé."); endCall(); });
   call.on("error", e => { console.error("Erreur d’appel", e); showToast("Erreur pendant l’appel."); });
@@ -371,7 +384,8 @@ function hangup(){
 function endCall(){
   clearTimeout(ringTimer);
   currentCall = null;
-  $("remote").innerHTML = "";
+  $("remoteVideo").srcObject = null;
+  $("unmuteBtn").hidden = true;
   $("stage").classList.remove("in-call", "connected");
   $("callBar").hidden = true; $("lobby").hidden = false;
   $("lobbySwitch").hidden = $("callSwitch").hidden;
@@ -379,6 +393,19 @@ function endCall(){
 }
 
 /* ================= Affichage ================= */
+
+// Le flux distant va dans un <video> à nous : on maîtrise sa taille et son cadrage
+function showRemote(remoteStream){
+  const v = $("remoteVideo");
+  remoteStream.attachToElement(v);
+  v.muted = false;
+  v.play().then(() => { $("unmuteBtn").hidden = true; }).catch(() => {
+    // Lecture avec son bloquée par le navigateur (fréquent sur iOS) : on lit sans son et on propose de l'activer
+    v.muted = true;
+    v.play().catch(() => {});
+    $("unmuteBtn").hidden = false;
+  });
+}
 
 function updateInfo(){
   const track = localStream?.getData()?.getVideoTracks()[0];
@@ -425,6 +452,10 @@ $("hangupBtn").onclick = hangup;
 $("lobbySwitch").onclick = switchCamera;
 $("callSwitch").onclick = switchCamera;
 $("linkBtn").onclick = copyLink;
+$("unmuteBtn").onclick = () => {
+  const v = $("remoteVideo"); v.muted = false; v.play().catch(() => {});
+  $("unmuteBtn").hidden = true;
+};
 
 window.addEventListener("pagehide", () => {
   try { currentCall?.hangUp(); } catch {}
