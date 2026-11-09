@@ -71,7 +71,23 @@ input{width:100%;font:inherit;color:inherit;background:var(--surface);border:1.5
 #hangupBtn{background:var(--danger)}
 .switch svg{transition:transform .35s}
 .switch.spin svg{transform:rotate(180deg)}
-#lobbySwitch{position:absolute;top:calc(env(safe-area-inset-top,0px) + .75rem);right:.75rem;z-index:3}
+/* Outils du lobby, en colonne en haut à droite */
+.side{position:absolute;top:calc(env(safe-area-inset-top,0px) + .75rem);right:.75rem;z-index:3;display:flex;flex-direction:column;gap:.6rem}
+/* Micro coupé : bouton blanc, comme dans les applis de visio */
+.round.off{background:#fff;color:#111}
+.mic-off-icon{display:none}
+.round.off .mic-on-icon{display:none}
+.round.off .mic-off-icon{display:block}
+
+/* Fenêtre de choix de caméra */
+.sheet-backdrop{position:absolute;inset:0;z-index:7;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center}
+.sheet{width:100%;max-width:30rem;background:var(--surface);color:var(--ink);border-radius:1rem 1rem 0 0;padding:1.1rem 1rem calc(env(safe-area-inset-bottom,0px) + 1rem);max-height:80vh;overflow:auto}
+.sheet h2{font-size:1.1rem;margin:0 0 .75rem}
+.camopt{display:flex;width:100%;align-items:center;justify-content:space-between;gap:.75rem;text-align:left;appearance:none;background:transparent;border:0;border-top:1px solid var(--line);color:inherit;font:inherit;padding:.85rem .25rem;min-height:52px;cursor:pointer}
+.camopt small{display:block;color:var(--muted);font-size:.8rem}
+.camopt .check{color:var(--accent);font-weight:700;font-size:1.2rem}
+.camopt:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
+.btn.secondary{background:transparent;color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent);width:100%;margin-top:.75rem}
 
 /* Appel entrant */
 .incoming{position:absolute;inset:0;z-index:5;background:rgba(0,0,0,.65);display:flex;flex-direction:column;justify-content:center;align-items:center;gap:1.5rem;text-align:center;padding:2rem}
@@ -110,9 +126,10 @@ input{width:100%;font:inherit;color:inherit;background:var(--surface);border:1.5
   <div class="top" id="info"></div>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 
-  <button class="round switch" id="lobbySwitch" aria-label="Changer de caméra" hidden>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/></svg>
-  </button>
+  <div class="side" id="lobbyTools">
+    <button class="round switch" id="lobbySwitch" aria-label="Basculer avant / arrière" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/></svg></button>
+    <button class="round" id="lobbySettings" aria-label="Choisir la caméra"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+  </div>
 
   <div class="panel" id="lobby">
     <div class="myid">
@@ -126,12 +143,23 @@ input{width:100%;font:inherit;color:inherit;background:var(--surface);border:1.5
   </div>
 
   <div class="bar" id="callBar" hidden>
+    <button class="round off" id="micBtn" aria-pressed="false" aria-label="Micro coupé – toucher pour l’ouvrir">
+      <svg class="mic-on-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><path d="M12 18v4"/></svg>
+      <svg class="mic-off-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3l18 18"/><path d="M9 9v2a3 3 0 0 0 5.1 2.1"/><path d="M15 9.3V5a3 3 0 0 0-5.7-1.3"/><path d="M19 10v1a7 7 0 0 1-1.1 3.8"/><path d="M5 10v1a7 7 0 0 0 11.2 5.6"/><path d="M12 18v4"/></svg>
+    </button>
     <button class="round" id="hangupBtn" aria-label="Raccrocher">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 15.5c5-4.7 13-4.7 18 0l-2.2 2.4-3.3-1.4v-2.7a9.5 9.5 0 0 0-7 0v2.7l-3.3 1.4z"/></svg>
     </button>
-    <button class="round switch" id="callSwitch" aria-label="Changer de caméra" hidden>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/></svg>
-    </button>
+    <button class="round switch" id="callSwitch" aria-label="Basculer avant / arrière" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/></svg></button>
+    <button class="round" id="callSettings" aria-label="Choisir la caméra"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+  </div>
+
+  <div class="sheet-backdrop" id="sheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+      <h2 id="sheetTitle">Choisir la caméra</h2>
+      <div id="camList"></div>
+      <button class="btn secondary" id="sheetClose">Fermer</button>
+    </div>
   </div>
 
   <div class="incoming" id="incoming" hidden>
@@ -152,6 +180,7 @@ const RING_TIMEOUT = 30000;
 let ua = null, session = null, localStream = null;
 let currentCall = null, pendingInvitation = null, ringTimer = null;
 let facing = "user", busy = false, toastTimer;
+let micOn = false;          // micro coupé par défaut
 
 /* ================= Caméra ================= */
 
@@ -163,12 +192,41 @@ function videoSize(){
     : { width: { ideal: 1280 }, height: { ideal: 720 } };
 }
 
-function createLocalStream(mode){
-  return ua.createStream({
-    facingMode: mode,
-    constraints: { audio: true, video: videoSize() },
-    tryAudioOnlyAfterUserMediaError: false    // sinon apiRTC peut repasser en audio seul sans prévenir
-  });
+// Ouvre une caméra soit par orientation ({ mode }), soit par identifiant précis ({ deviceId })
+async function createLocalStream({ mode, deviceId } = {}){
+  const video = videoSize();
+  const opts = { tryAudioOnlyAfterUserMediaError: false };   // sinon apiRTC peut repasser en audio seul sans prévenir
+  if (deviceId) {
+    opts.videoInputId = deviceId;
+    video.deviceId = { exact: deviceId };
+  } else {
+    opts.facingMode = mode;
+  }
+  opts.constraints = { audio: true, video };
+  const stream = await ua.createStream(opts);
+  await applyMic(stream);                    // chaque nouveau flux reprend l'état du micro
+  return stream;
+}
+
+/* ================= Micro ================= */
+
+async function applyMic(stream){
+  if (!stream) return;
+  try {
+    if (micOn) await stream.enableAudio(); else await stream.disableAudio();
+  } catch (e) { console.warn("enable/disableAudio", e); }
+  // Filet de sécurité : on vérifie directement les pistes audio natives
+  stream.getData()?.getAudioTracks().forEach(t => { if (t.enabled !== micOn) t.enabled = micOn; });
+}
+
+async function setMic(on){
+  micOn = on;
+  await applyMic(localStream);
+  const b = $("micBtn");
+  b.classList.toggle("off", !on);
+  b.setAttribute("aria-pressed", String(on));
+  b.setAttribute("aria-label", on ? "Micro ouvert – toucher pour le couper" : "Micro coupé – toucher pour l’ouvrir");
+  updateInfo();
 }
 
 function realFacing(stream){
@@ -187,7 +245,7 @@ function showLocal(stream){
 // Ouvre la caméra du côté demandé ; si c'est impossible, revient au côté précédent
 async function openSide(target){
   try {
-    const s = await createLocalStream(target);
+    const s = await createLocalStream({ mode: target });
     const got = realFacing(s);
     if (got && got !== target) showToast("Pas d’autre caméra disponible de ce côté.");
     facing = got || target;
@@ -195,19 +253,43 @@ async function openSide(target){
   } catch (e) {
     console.warn("Ouverture de la caméra « " + target + " » impossible", e);
     showToast("Impossible d’ouvrir l’autre caméra.");
-    const s = await createLocalStream(facing);
+    const s = await createLocalStream({ mode: facing });
     facing = realFacing(s) || facing;
     return s;
   }
 }
 
-async function switchCamera(){
+// Ouvre une caméra précise ; en cas d'échec, revient à la caméra par défaut du côté courant
+async function openDevice(deviceId){
+  try {
+    const s = await createLocalStream({ deviceId });
+    facing = realFacing(s) || facing;
+    return s;
+  } catch (e) {
+    console.warn("Ouverture de la caméra " + deviceId + " impossible", e);
+    showToast("Impossible d’ouvrir cette caméra.");
+    const s = await createLocalStream({ mode: facing });
+    facing = realFacing(s) || facing;
+    return s;
+  }
+}
+
+function switchCamera(){
+  const target = facing === "user" ? "environment" : "user";
+  document.querySelectorAll(".switch").forEach(b => b.classList.toggle("spin"));
+  return replaceCamera(() => openSide(target));
+}
+
+function selectCamera(deviceId){
+  return replaceCamera(() => openDevice(deviceId));
+}
+
+// Remplace la caméra en cours par celle que fournit openNew(), dans l'aperçu et dans l'appel
+async function replaceCamera(openNew){
   if (busy || !localStream) return;
   busy = true;
-  document.querySelectorAll(".switch").forEach(b => { b.disabled = true; b.classList.toggle("spin"); });
+  document.querySelectorAll(".switch, #lobbySettings, #callSettings").forEach(b => b.disabled = true);
   localVideo.classList.add("switching");
-
-  const target = facing === "user" ? "environment" : "user";
   const old = localStream;
 
   try {
@@ -217,7 +299,7 @@ async function switchCamera(){
       const result = await currentCall.replacePublishedStreams(null, {
         getStream: async () => {
           old.release();              // libérer AVANT d'ouvrir l'autre caméra (contrainte des téléphones)
-          created = await openSide(target);
+          created = await openNew();
           return created;
         }
       });
@@ -225,7 +307,7 @@ async function switchCamera(){
     } else {
       // Hors appel : simple remplacement de l'aperçu
       old.release();
-      localStream = await openSide(target);
+      localStream = await openNew();
     }
     showLocal(localStream);
   } catch (e) {
@@ -233,7 +315,7 @@ async function switchCamera(){
     showToast(errorText(e));
   } finally {
     localVideo.classList.remove("switching");
-    document.querySelectorAll(".switch").forEach(b => b.disabled = false);
+    document.querySelectorAll(".switch, #lobbySettings, #callSettings").forEach(b => b.disabled = false);
     busy = false;
   }
 }
@@ -251,7 +333,7 @@ async function connect(){
   $("introMsg").textContent = "Ouverture de la caméra…";
   try {
     ua = new apiRTC.UserAgent({ uri: "apzkey:" + key });
-    localStream = await createLocalStream(facing);
+    localStream = await createLocalStream({ mode: facing });
     facing = realFacing(localStream) || facing;
 
     $("introMsg").textContent = "Connexion au serveur…";
@@ -279,12 +361,13 @@ async function connect(){
 
 /* ================= Appel sortant : contact.call() ================= */
 
-function placeCall(){
+async function placeCall(){
   const calleeId = $("calleeInput").value.trim();
   if (!calleeId) { showToast("Saisissez l’identifiant à appeler."); return; }
   if (calleeId === session.getId()) { showToast("Vous ne pouvez pas vous appeler vous-même."); return; }
 
   const contact = session.getOrCreateContact(calleeId);
+  await setMic(false);                           // chaque appel démarre micro coupé
   const call = contact.call(localStream);        // renvoie directement l'objet Call
   if (!call) { showToast("L’appel n’a pas pu être lancé."); return; }
 
@@ -325,6 +408,7 @@ async function acceptCall(){
   $("incoming").hidden = true;
   pendingInvitation = null;
   try {
+    await setMic(false);                         // chaque appel démarre micro coupé
     const call = await inv.accept(localStream);
     setupCall(call);
     enterCallUI(`En appel avec ${call.getContact().getId()}`);
@@ -370,7 +454,7 @@ function setupCall(call){
 
 function enterCallUI(text){
   $("stage").classList.add("in-call");
-  $("lobby").hidden = true; $("lobbySwitch").hidden = true; $("callBar").hidden = false;
+  $("lobby").hidden = true; $("lobbyTools").hidden = true; $("callBar").hidden = false;
   showToast(text);
   updateInfo();
 }
@@ -388,9 +472,56 @@ function endCall(){
   $("unmuteBtn").hidden = true;
   $("stage").classList.remove("in-call", "connected");
   $("callBar").hidden = true; $("lobby").hidden = false;
-  $("lobbySwitch").hidden = $("callSwitch").hidden;
+  $("lobbyTools").hidden = false;
+  closeSettings();
   updateInfo();
 }
+
+/* ================= Choix de la caméra ================= */
+
+const FACING_WORDS = [
+  [/back|rear|arrière|environment/i, "arrière"],
+  [/front|avant|user|facetime/i, "avant"]
+];
+function guessSide(label){
+  for (const [re, side] of FACING_WORDS) if (re.test(label || "")) return side;
+  return null;
+}
+
+async function openSettings(){
+  if (busy) return;
+  const currentId = localStream?.getData()?.getVideoTracks()[0]?.getSettings().deviceId;
+  let cams = [];
+  try { cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput"); }
+  catch (e) { console.warn(e); }
+
+  const list = $("camList");
+  list.innerHTML = "";
+  if (!cams.length) list.innerHTML = '<p>Aucune caméra trouvée.</p>';
+  cams.forEach((d, i) => {
+    const active = d.deviceId === currentId;
+    const side = guessSide(d.label);
+    const b = document.createElement("button");
+    b.className = "camopt";
+    b.setAttribute("aria-current", active ? "true" : "false");
+    const name = document.createElement("span");
+    name.textContent = d.label || `Caméra ${i + 1}`;
+    if (side || active) {
+      const small = document.createElement("small");
+      small.textContent = [side && `Côté ${side}`, active && "En cours d’utilisation"].filter(Boolean).join(" · ");
+      name.appendChild(small);
+    }
+    b.appendChild(name);
+    if (active) b.insertAdjacentHTML("beforeend", '<span class="check" aria-hidden="true">✓</span>');
+    b.onclick = () => { closeSettings(); if (!active) selectCamera(d.deviceId); };
+    list.appendChild(b);
+  });
+
+  $("sheet").hidden = false;
+  (list.querySelector('[aria-current="true"]') || $("sheetClose")).focus();
+}
+
+function closeSettings(){ $("sheet").hidden = true; }
 
 /* ================= Affichage ================= */
 
@@ -413,7 +544,8 @@ function updateInfo(){
   const s = track.getSettings();
   const side = { user: "avant", environment: "arrière" }[s.facingMode] || "inconnu";
   const who = currentCall ? `En appel avec ${currentCall.getContact().getId()}` : `Connecté · id ${session?.getId() ?? "?"}`;
-  $("info").textContent = `${who}\n${track.label || "Caméra"} · ${side} · ${s.width}×${s.height}`;
+  const mic = currentCall ? (micOn ? " · micro ouvert" : " · micro coupé") : "";
+  $("info").textContent = `${who}${mic}\n${track.label || "Caméra"} · ${side} · ${s.width}×${s.height}`;
 }
 
 function errorText(e){
@@ -452,6 +584,12 @@ $("hangupBtn").onclick = hangup;
 $("lobbySwitch").onclick = switchCamera;
 $("callSwitch").onclick = switchCamera;
 $("linkBtn").onclick = copyLink;
+$("micBtn").onclick = () => setMic(!micOn);
+$("lobbySettings").onclick = openSettings;
+$("callSettings").onclick = openSettings;
+$("sheetClose").onclick = closeSettings;
+$("sheet").onclick = e => { if (e.target.id === "sheet") closeSettings(); };
+document.addEventListener("keydown", e => { if (e.key === "Escape" && !$("sheet").hidden) closeSettings(); });
 $("unmuteBtn").onclick = () => {
   const v = $("remoteVideo"); v.muted = false; v.play().catch(() => {});
   $("unmuteBtn").hidden = true;
