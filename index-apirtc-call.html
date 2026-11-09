@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>apiRTC – appel 1-1 avec bascule caméra</title>
+<!-- apiRTC en version figée depuis jsDelivr, avec repli sur le CDN Apizee -->
+<script src="https://cdn.jsdelivr.net/npm/@apirtc/apirtc@5.0.37/apiRTC.min.js"
+        onerror="var s=document.createElement('script');s.src='https://cloud.apizee.com/apiRTC/apiRTC-latest.min.js';document.head.appendChild(s);"></script>
+<style>
+:root{
+  --bg:#F2F4F6; --surface:#FFFFFF; --ink:#17212B; --muted:#5D6975; --line:#D3DAE1;
+  --accent:#1F7A5C; --accent-ink:#FFFFFF; --danger:#C8372D; --err:#B3401E;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --bg:#10161C; --surface:#18212A; --ink:#E6ECF1; --muted:#97A3AE; --line:#2B3846; --accent:#3FBF8F; --accent-ink:#06120D; --danger:#E5574C; --err:#F08A63; color-scheme: dark; }
+}
+:root[data-theme="dark"]{ --bg:#10161C; --surface:#18212A; --ink:#E6ECF1; --muted:#97A3AE; --line:#2B3846; --accent:#3FBF8F; --accent-ink:#06120D; --danger:#E5574C; --err:#F08A63; color-scheme: dark; }
+
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+[hidden]{display:none !important}
+
+/* ---------- Connexion ---------- */
+.intro{min-height:100%;display:flex;flex-direction:column;justify-content:center;gap:1rem;max-width:26rem;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 2rem) 1.5rem calc(env(safe-area-inset-bottom,0px) + 2rem)}
+.intro h1{font-size:1.7rem;margin:0;line-height:1.15}
+.intro p{margin:0;color:var(--muted)}
+label{display:block;font-size:.85rem;font-weight:600;margin-bottom:.3rem}
+input{width:100%;font:inherit;color:inherit;background:var(--surface);border:1.5px solid var(--line);border-radius:.5rem;padding:.7rem .8rem;min-height:48px}
+.hint{font-size:.8rem;color:var(--muted);margin-top:.3rem}
+.btn{appearance:none;border:0;border-radius:2rem;padding:.85rem 1.6rem;background:var(--accent);color:var(--accent-ink);font:inherit;font-weight:600;min-height:48px;cursor:pointer}
+.btn.danger{background:var(--danger);color:#fff}
+.btn:disabled{opacity:.5}
+.err{color:var(--err)}
+.btn:focus-visible,.round:focus-visible,input:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+
+/* ---------- Vue vidéo (toujours sombre) ---------- */
+.stage{position:fixed;inset:0;background:#000;color:#fff}
+#remote{position:absolute;inset:0}
+#remote video{width:100%;height:100%;object-fit:cover;display:block;background:#111}
+
+#localWrap{position:absolute;inset:0;transition:all .25s ease}
+.in-call #localWrap{inset:auto;top:calc(env(safe-area-inset-top,0px) + 3.5rem);right:.75rem;width:28vw;max-width:150px;aspect-ratio:3/4;border-radius:.7rem;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.5);z-index:2}
+#localVideo{width:100%;height:100%;object-fit:cover;display:block;transition:opacity .15s}
+#localVideo.mirror{transform:scaleX(-1)}
+#localVideo.switching{opacity:0}
+
+.top{position:absolute;top:0;left:0;right:0;padding:calc(env(safe-area-inset-top,0px) + .75rem) .9rem .75rem;font-size:.8rem;line-height:1.35;text-shadow:0 1px 3px rgba(0,0,0,.9);background:linear-gradient(rgba(0,0,0,.5),transparent);z-index:3;white-space:pre-line;font-variant-numeric:tabular-nums;pointer-events:none}
+.toast{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 8rem);transform:translateX(-50%);background:rgba(0,0,0,.75);padding:.5rem .9rem;border-radius:1rem;font-size:.85rem;max-width:90%;text-align:center;z-index:6}
+
+/* Panneau « lobby » : appeler quelqu’un */
+.panel{position:absolute;left:0;right:0;bottom:0;z-index:4;padding:1rem 1rem calc(env(safe-area-inset-bottom,0px) + 1rem);background:var(--surface);color:var(--ink);border-radius:1rem 1rem 0 0;display:grid;gap:.75rem}
+.myid{display:flex;align-items:center;justify-content:space-between;gap:.75rem;font-size:.9rem}
+.myid strong{font-size:1.2rem;font-variant-numeric:tabular-nums;letter-spacing:.04em}
+.callrow{display:flex;gap:.5rem}
+.callrow input{flex:1}
+.linkbtn{appearance:none;border:0;background:transparent;color:var(--accent);font:inherit;font-weight:600;cursor:pointer;padding:.5rem;min-height:44px}
+
+/* Barre d’appel */
+.bar{position:absolute;left:0;right:0;bottom:0;padding:1rem 1.5rem calc(env(safe-area-inset-bottom,0px) + 1.25rem);display:flex;justify-content:center;gap:1.5rem;background:linear-gradient(transparent,rgba(0,0,0,.6));z-index:3}
+.round{appearance:none;border:0;cursor:pointer;display:grid;place-items:center;color:#fff;background:rgba(255,255,255,.18);border-radius:50%;width:56px;height:56px;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.round:disabled{opacity:.4}
+.round svg{width:26px;height:26px}
+#hangupBtn{background:var(--danger)}
+.switch svg{transition:transform .35s}
+.switch.spin svg{transform:rotate(180deg)}
+#lobbySwitch{position:absolute;top:calc(env(safe-area-inset-top,0px) + .75rem);right:.75rem;z-index:3}
+
+/* Appel entrant */
+.incoming{position:absolute;inset:0;z-index:5;background:rgba(0,0,0,.65);display:flex;flex-direction:column;justify-content:center;align-items:center;gap:1.5rem;text-align:center;padding:2rem}
+.incoming h2{margin:0;font-size:1.4rem}
+.incoming .actions{display:flex;gap:1rem}
+@media (prefers-reduced-motion: reduce){ #localWrap,#localVideo,.switch svg{transition:none} }
+</style>
+</head>
+<body>
+
+<!-- 1. Connexion -->
+<section class="intro" id="intro">
+  <h1>Appel vidéo 1-1</h1>
+  <p>Connectez-vous sur deux appareils, puis appelez l’identifiant de l’autre. Vous pourrez basculer de caméra avant et pendant l’appel.</p>
+  <div>
+    <label for="myIdInput">Mon identifiant</label>
+    <input id="myIdInput" inputmode="numeric" autocomplete="off">
+    <p class="hint">Choisissez-en un simple : c’est ce que l’autre personne tapera pour vous appeler.</p>
+  </div>
+  <div>
+    <label for="apiKey">Clé API apiRTC</label>
+    <input id="apiKey" autocomplete="off" autocapitalize="off" value="myDemoApiKey">
+    <p class="hint">La clé de démonstration suffit pour tester. Utilisez la vôtre en production.</p>
+  </div>
+  <button class="btn" id="connectBtn">Se connecter</button>
+  <p id="introMsg" role="status" aria-live="polite"></p>
+</section>
+
+<!-- 2. Vidéo : lobby puis appel -->
+<section class="stage" id="stage" hidden>
+  <div id="remote"></div>
+  <div id="localWrap"><video id="localVideo" playsinline muted autoplay></video></div>
+  <div class="top" id="info"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <button class="round switch" id="lobbySwitch" aria-label="Changer de caméra" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/></svg>
+  </button>
+
+  <div class="panel" id="lobby">
+    <div class="myid">
+      <span>Mon identifiant : <strong id="myIdLabel"></strong></span>
+      <button class="linkbtn" id="linkBtn">Copier mon lien</button>
+    </div>
+    <div class="callrow">
+      <input id="calleeInput" inputmode="numeric" autocomplete="off" placeholder="Identifiant à appeler" aria-label="Identifiant à appeler">
+      <button class="btn" id="callBtn">Appeler</button>
+    </div>
+  </div>
+
+  <div class="bar" id="callBar" hidden>
+    <button class="round" id="hangupBtn" aria-label="Raccrocher">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 15.5c5-4.7 13-4.7 18 0l-2.2 2.4-3.3-1.4v-2.7a9.5 9.5 0 0 0-7 0v2.7l-3.3 1.4z"/></svg>
+    </button>
+    <button class="round switch" id="callSwitch" aria-label="Changer de caméra" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 4v4h4"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 20v-4h-4"/></svg>
+    </button>
+  </div>
+
+  <div class="incoming" id="incoming" hidden>
+    <h2 id="incomingText">Appel entrant</h2>
+    <div class="actions">
+      <button class="btn danger" id="declineBtn">Refuser</button>
+      <button class="btn" id="acceptBtn">Accepter</button>
+    </div>
+  </div>
+</section>
+
+<script>
+const $ = id => document.getElementById(id);
+const localVideo = $("localVideo");
+const CLOUD_URL = "https://cloud.apirtc.com";
+const RING_TIMEOUT = 30000;
+
+let ua = null, session = null, localStream = null;
+let currentCall = null, pendingInvitation = null, ringTimer = null;
+let facing = "user", busy = false, toastTimer;
+
+/* ================= Caméra ================= */
+
+function createLocalStream(mode){
+  return ua.createStream({
+    facingMode: mode,
+    constraints: { audio: true, video: { width: { ideal: 1280 }, height: { ideal: 720 } } },
+    tryAudioOnlyAfterUserMediaError: false    // sinon apiRTC peut repasser en audio seul sans prévenir
+  });
+}
+
+function realFacing(stream){
+  const track = stream?.getData()?.getVideoTracks()[0];
+  return track?.getSettings().facingMode || null;
+}
+
+function showLocal(stream){
+  stream.attachToElement(localVideo);
+  localVideo.muted = true;
+  localVideo.play().catch(() => {});
+  localVideo.classList.toggle("mirror", facing === "user");
+  updateInfo();
+}
+
+// Ouvre la caméra du côté demandé ; si c'est impossible, revient au côté précédent
+async function openSide(target){
+  try {
+    const s = await createLocalStream(target);
+    const got = realFacing(s);
+    if (got && got !== target) showToast("Pas d’autre caméra disponible de ce côté.");
+    facing = got || target;
+    return s;
+  } catch (e) {
+    console.warn("Ouverture de la caméra « " + target + " » impossible", e);
+    showToast("Impossible d’ouvrir l’autre caméra.");
+    const s = await createLocalStream(facing);
+    facing = realFacing(s) || facing;
+    return s;
+  }
+}
+
+async function switchCamera(){
+  if (busy || !localStream) return;
+  busy = true;
+  document.querySelectorAll(".switch").forEach(b => { b.disabled = true; b.classList.toggle("spin"); });
+  localVideo.classList.add("switching");
+
+  const target = facing === "user" ? "environment" : "user";
+  const old = localStream;
+
+  try {
+    if (currentCall) {
+      // Pendant l'appel : apiRTC appelle getStream() au bon moment et envoie la nouvelle vidéo à l'interlocuteur
+      let created = null;
+      const result = await currentCall.replacePublishedStreams(null, {
+        getStream: async () => {
+          old.release();              // libérer AVANT d'ouvrir l'autre caméra (contrainte des téléphones)
+          created = await openSide(target);
+          return created;
+        }
+      });
+      localStream = created || result;
+    } else {
+      // Hors appel : simple remplacement de l'aperçu
+      old.release();
+      localStream = await openSide(target);
+    }
+    showLocal(localStream);
+  } catch (e) {
+    console.error("Bascule de caméra impossible", e);
+    showToast(errorText(e));
+  } finally {
+    localVideo.classList.remove("switching");
+    document.querySelectorAll(".switch").forEach(b => b.disabled = false);
+    busy = false;
+  }
+}
+
+/* ================= Connexion ================= */
+
+async function connect(){
+  const myId = $("myIdInput").value.trim();
+  const key = $("apiKey").value.trim();
+  if (!myId || !key) { setIntroError("Renseignez un identifiant et une clé API."); return; }
+  if (!window.isSecureContext) { setIntroError("La caméra n’est accessible qu’en HTTPS : ouvrez la page via GitHub Pages."); return; }
+  if (typeof apiRTC === "undefined") { setIntroError("La bibliothèque apiRTC n’a pas pu être chargée."); return; }
+
+  $("connectBtn").disabled = true;
+  $("introMsg").textContent = "Ouverture de la caméra…";
+  try {
+    ua = new apiRTC.UserAgent({ uri: "apzkey:" + key });
+    localStream = await createLocalStream(facing);
+    facing = realFacing(localStream) || facing;
+
+    $("introMsg").textContent = "Connexion au serveur…";
+    session = await ua.register({ cloudUrl: CLOUD_URL, id: myId });
+    session.on("incomingCall", onIncomingCall);
+
+    try { localStorage.setItem("apirtc-my-id", myId); } catch {}
+    $("myIdLabel").textContent = session.getId();
+    $("intro").hidden = true; $("stage").hidden = false;
+    showLocal(localStream);
+
+    const cams = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "videoinput");
+    const canSwitch = cams.length >= 2;
+    $("lobbySwitch").hidden = !canSwitch;
+    $("callSwitch").hidden = !canSwitch;
+  } catch (e) {
+    console.error(e);
+    try { localStream?.release(); } catch {}
+    localStream = null; ua = null; session = null;
+    setIntroError(errorText(e));
+  } finally {
+    $("connectBtn").disabled = false;
+  }
+}
+
+/* ================= Appel sortant : contact.call() ================= */
+
+function placeCall(){
+  const calleeId = $("calleeInput").value.trim();
+  if (!calleeId) { showToast("Saisissez l’identifiant à appeler."); return; }
+  if (calleeId === session.getId()) { showToast("Vous ne pouvez pas vous appeler vous-même."); return; }
+
+  const contact = session.getOrCreateContact(calleeId);
+  const call = contact.call(localStream);        // renvoie directement l'objet Call
+  if (!call) { showToast("L’appel n’a pas pu être lancé."); return; }
+
+  setupCall(call);
+  enterCallUI(`Appel de ${calleeId}…`);
+
+  // Sans réponse au bout de 30 s, on abandonne
+  ringTimer = setTimeout(() => {
+    if (currentCall === call && !$("stage").classList.contains("connected")) {
+      showToast("Pas de réponse.");
+      call.hangUp();
+      endCall();
+    }
+  }, RING_TIMEOUT);
+}
+
+/* ================= Appel entrant ================= */
+
+function onIncomingCall(invitation){
+  if (currentCall || pendingInvitation) {       // déjà occupé : on refuse poliment
+    invitation.decline("busy");
+    return;
+  }
+  pendingInvitation = invitation;
+  $("incomingText").textContent = `Appel entrant de ${invitation.getSender().getId()}`;
+  $("incoming").hidden = false;
+  invitation.on("statusChange", st => {
+    // L'appelant a raccroché avant qu'on réponde
+    const gone = [apiRTC.INVITATION_STATUS_CANCELLED, apiRTC.INVITATION_STATUS_EXPIRED];
+    const ended = gone.includes(st.status) || /CANCEL|EXPIRE/i.test(String(st.status));
+    if (pendingInvitation === invitation && ended) closeIncoming("Appel manqué.");
+  });
+}
+
+async function acceptCall(){
+  const inv = pendingInvitation;
+  if (!inv) return;
+  $("incoming").hidden = true;
+  pendingInvitation = null;
+  try {
+    const call = await inv.accept(localStream);
+    setupCall(call);
+    enterCallUI(`En appel avec ${call.getContact().getId()}`);
+  } catch (e) {
+    console.error(e);
+    showToast("Impossible de répondre à l’appel.");
+  }
+}
+
+function declineCall(){
+  pendingInvitation?.decline("refused");
+  closeIncoming();
+}
+
+function closeIncoming(msg){
+  pendingInvitation = null;
+  $("incoming").hidden = true;
+  if (msg) showToast(msg);
+}
+
+/* ================= Cycle de vie de l'appel ================= */
+
+function setupCall(call){
+  currentCall = call;
+
+  call.on("accepted", () => {
+    clearTimeout(ringTimer);
+    $("stage").classList.add("connected");
+    updateInfo();
+  });
+  call.on("declined", () => { showToast("Appel refusé."); endCall(); });
+  call.on("streamAdded", remoteStream => {
+    clearTimeout(ringTimer);
+    $("stage").classList.add("connected");
+    $("remote").innerHTML = "";
+    remoteStream.addInDiv("remote", "remote-media-" + remoteStream.getId(), {}, false);
+    updateInfo();
+  });
+  call.on("streamRemoved", remoteStream => {
+    remoteStream.removeFromDiv("remote", "remote-media-" + remoteStream.getId());
+  });
+  call.on("hangup", () => { showToast("Appel terminé."); endCall(); });
+  call.on("error", e => { console.error("Erreur d’appel", e); showToast("Erreur pendant l’appel."); });
+}
+
+function enterCallUI(text){
+  $("stage").classList.add("in-call");
+  $("lobby").hidden = true; $("lobbySwitch").hidden = true; $("callBar").hidden = false;
+  showToast(text);
+  updateInfo();
+}
+
+function hangup(){
+  try { currentCall?.hangUp(); } catch (e) { console.warn(e); }
+  endCall();
+}
+
+// Retour au lobby : on garde la session et la caméra pour pouvoir rappeler
+function endCall(){
+  clearTimeout(ringTimer);
+  currentCall = null;
+  $("remote").innerHTML = "";
+  $("stage").classList.remove("in-call", "connected");
+  $("callBar").hidden = true; $("lobby").hidden = false;
+  $("lobbySwitch").hidden = $("callSwitch").hidden;
+  updateInfo();
+}
+
+/* ================= Affichage ================= */
+
+function updateInfo(){
+  const track = localStream?.getData()?.getVideoTracks()[0];
+  if (!track) { $("info").textContent = ""; return; }
+  const s = track.getSettings();
+  const side = { user: "avant", environment: "arrière" }[s.facingMode] || "inconnu";
+  const who = currentCall ? `En appel avec ${currentCall.getContact().getId()}` : `Connecté · id ${session?.getId() ?? "?"}`;
+  $("info").textContent = `${who}\n${track.label || "Caméra"} · ${side} · ${s.width}×${s.height}`;
+}
+
+function errorText(e){
+  const name = e?.name || e?.error?.name || "";
+  switch (name) {
+    case "NotAllowedError":  return "Accès à la caméra refusé. Autorisez-le dans les réglages du navigateur.";
+    case "NotReadableError": return "La caméra est utilisée par une autre application. Fermez-la puis réessayez.";
+    case "NotFoundError":    return "Aucune caméra trouvée sur cet appareil.";
+    default:                 return "Opération impossible" + (name ? ` (${name})` : "") + ". Consultez la console pour le détail.";
+  }
+}
+function setIntroError(msg){ $("introMsg").innerHTML = `<span class="err">${msg}</span>`; }
+function showToast(msg){
+  const t = $("toast"); t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.hidden = true, 3500);
+}
+
+async function copyLink(){
+  const url = location.href.split("#")[0] + "#" + encodeURIComponent(session.getId());
+  try { await navigator.clipboard.writeText(url); showToast("Lien copié : la personne qui l’ouvre pourra vous appeler directement."); }
+  catch { showToast(url); }
+}
+
+/* ================= Initialisation ================= */
+
+let savedId = null;
+try { savedId = localStorage.getItem("apirtc-my-id"); } catch {}
+$("myIdInput").value = savedId || String(Math.floor(100000 + Math.random() * 900000));
+$("calleeInput").value = decodeURIComponent(location.hash.slice(1));   // lien reçu = identifiant à appeler
+
+$("connectBtn").onclick = connect;
+$("callBtn").onclick = placeCall;
+$("acceptBtn").onclick = acceptCall;
+$("declineBtn").onclick = declineCall;
+$("hangupBtn").onclick = hangup;
+$("lobbySwitch").onclick = switchCamera;
+$("callSwitch").onclick = switchCamera;
+$("linkBtn").onclick = copyLink;
+
+window.addEventListener("pagehide", () => {
+  try { currentCall?.hangUp(); } catch {}
+  try { localStream?.release(); } catch {}
+});
+</script>
+</body>
+</html>
